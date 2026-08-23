@@ -11,6 +11,9 @@ import {
   learnCategory,
   requestLearnCategory,
   requestSetMistakenIdentity,
+  requestRecordFalseInfo,
+  removeFalseInfo,
+  getFalseInfo,
   initCodexSocket,
   openCodex
 } from "./codex.js";
@@ -475,16 +478,53 @@ class RecallKnowledge {
 
     if (outcome === "criticalFailure") {
       const lore = targetActor.getFlag(MODULE_ID, "lore") || {};
-      let text = lore.falseInfo;
-      let mistakenNote = "";
+      const hasGmLore = Boolean(lore.falseInfo);
+      // Only search for a mistaken-identity stand-in if there's no
+      // GM-authored lore to fall back on — GM lore always wins.
+      const mistaken = hasGmLore ? null : await resolveMistakenIdentity(targetActor);
 
-      if (!text) {
-        const mistaken = await resolveMistakenIdentity(targetActor);
-        if (mistaken) {
-          const catId = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)].id;
-          text = extractCategory(mistaken.actor, catId);
-          mistakenNote = `This is actually ${mistaken.actor.name}'s "${categoryLabel(catId)}" info — the player mistook ${targetActor.name} for it.`;
-        }
+      // The player gets the same category-picker experience as a real
+      // success — from their side of the table there's no visible
+      // difference, since they don't know this check actually failed.
+      // What differs is what's behind the pick: a lie instead of the truth.
+      // Filtering to not-yet-known categories, same as a real success,
+      // keeps the picker's contents indistinguishable either way — a
+      // player comparing this dialog against the (player-viewable) Codex
+      // shouldn't be able to tell a crit-fail prompt from a real one.
+      const known = new Set(await getKnownCategories(targetActor));
+      const available = CATEGORIES.filter((c) => !known.has(c.id));
+      if (available.length === 0) {
+        await postPlayerCard(targetActor, {
+          outcome,
+          text: "The party already knows everything Recall Knowledge can reveal about this creature.",
+          rollingUser
+        });
+        await ChatMessage.create({
+          speaker: { alias: "Recall Knowledge (GM only)" },
+          content:
+            "<p>Critical failure, but every category is already known (true) in the Codex, so no false info was shown — nothing to mislead the player about.</p>",
+          whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id)
+        });
+        return;
+      }
+
+      const picks = await RecallKnowledge.promptCategoryPicker(targetActor.name, available, 1);
+      if (!picks || picks.length === 0) return;
+      const catId = picks[0];
+
+      let text;
+      let mistakenNote = "";
+      let source = null;
+      let sourceDetail = "";
+      if (hasGmLore) {
+        text = lore.falseInfo;
+        source = "gm-lore";
+        sourceDetail = "GM-authored false lore (doesn't vary by category — the same text is logged/shown regardless of what the player picks).";
+      } else if (mistaken) {
+        text = extractCategory(mistaken.actor, catId);
+        mistakenNote = `This is actually ${mistaken.actor.name}'s "${categoryLabel(catId)}" info — the player mistook ${targetActor.name} for it.`;
+        source = "mistaken-identity";
+        sourceDetail = mistakenNote;
       }
 
       if (!text) {
@@ -492,16 +532,44 @@ class RecallKnowledge {
           "You recall something about this creature... and you're certain of it. (No similar creature or GM-authored false lore was found — improvise something plausible but wrong.)";
       }
 
-      await postPlayerCard(targetActor, { outcome, text, rollingUser });
+      const sections = [{ label: categoryLabel(catId), html: text }];
+      await postPlayerCard(targetActor, { outcome, sections, rollingUser });
+
+      // Log it to the (GM-only, per-creature) False Lore page in the Codex so
+      // there's a durable record of every lie the party's been told and who
+      // it came from — not just whatever's still visible in chat scrollback.
+      // Nothing is logged for the generic no-source placeholder above, since
+      // that's an instruction to the GM to improvise, not an actual claim.
+      let entryId = null;
+      if (source) {
+        const recorded = await requestRecordFalseInfo(targetActor, {
+          categoryId: catId,
+          html: text,
+          source,
+          sourceDetail
+        });
+        entryId = recorded?.entryId ?? null;
+      }
 
       const gmOnlyLines = [
-        "Critical failure: the text above was shown to the player as fact, but it is FALSE."
+        `Critical failure: the "${categoryLabel(catId)}" info shown above was presented to the player as fact, but it is FALSE.`
       ];
       if (mistakenNote) gmOnlyLines.push(mistakenNote);
       if (lore.gmNotes) gmOnlyLines.push(`GM notes: ${lore.gmNotes}`);
+      if (source) {
+        gmOnlyLines.push(
+          entryId
+            ? "Logged to this creature's (GM-only) False Lore page in the Codex."
+            : "Couldn't log this to the Codex — no GM was online to relay the write. Note it down yourself if you want a record."
+        );
+      }
+
+      const removeButton = entryId
+        ? `<p><a class="rk-remove-false" href="#" data-actor-uuid="${targetActor.uuid}" data-entry-id="${entryId}"><i class="fa-solid fa-trash"></i> Remove this from the Codex</a></p>`
+        : "";
       await ChatMessage.create({
         speaker: { alias: "Recall Knowledge (GM only)" },
-        content: `<p>${gmOnlyLines.join("<br><br>")}</p>`,
+        content: `<p>${gmOnlyLines.join("<br><br>")}</p>${removeButton}`,
         whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id)
       });
       return;
@@ -727,6 +795,11 @@ Hooks.once("ready", async () => {
         codexKeyForActor,
         getOrCreateJournal,
         openCodex,
+        // GM-only False Lore log — everything a Critical Failure has told
+        // players about a creature, kept on a page players can never see.
+        getFalseInfo,
+        removeFalseInfo,
+        recordFalseInfo: requestRecordFalseInfo,
         CATEGORIES
       }
     };
@@ -791,3 +864,40 @@ Hooks.on("getActorSheetHeaderButtons", (sheet, buttons) => {
     onclick: () => RecallKnowledge.openLoreEditor(actor)
   });
 });
+
+/**
+ * Wires up the "Remove this from the Codex" link on the GM-only Critical
+ * Failure chat message. Registered under both hook names since Foundry
+ * renamed `renderChatMessage` (jQuery) to `renderChatMessageHTML` (raw
+ * element) around v13 — `root()` normalizes whichever one actually fires.
+ * The button only ever reaches a GM's screen (the message is GM-whispered),
+ * but the isGM check is kept as a defensive second layer.
+ */
+function wireFalseLoreRemoveButtons(_message, html) {
+  const el = root(html);
+  const buttons = el?.querySelectorAll ? el.querySelectorAll(".rk-remove-false") : [];
+  buttons.forEach((btn) => {
+    if (btn.dataset.rkWired) return;
+    btn.dataset.rkWired = "1";
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      if (!game.user.isGM || btn.dataset.rkBusy) return;
+      btn.dataset.rkBusy = "1";
+      const originalText = btn.innerHTML;
+      btn.innerHTML = "Removing…";
+      try {
+        const actor = await fromUuid(btn.dataset.actorUuid);
+        const removed = actor ? await removeFalseInfo(actor, btn.dataset.entryId) : false;
+        btn.innerHTML = removed
+          ? '<i class="fa-solid fa-check"></i> Removed from the Codex'
+          : "Couldn't find that entry (already removed?)";
+      } catch (err) {
+        console.error("Spider Vibes | failed to remove a false-lore Codex entry", err);
+        btn.innerHTML = originalText;
+        delete btn.dataset.rkBusy;
+      }
+    });
+  });
+}
+Hooks.on("renderChatMessage", wireFalseLoreRemoveButtons);
+Hooks.on("renderChatMessageHTML", wireFalseLoreRemoveButtons);
