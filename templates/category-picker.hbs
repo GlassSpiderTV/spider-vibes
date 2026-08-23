@@ -1,0 +1,15 @@
+<form class="recall-knowledge-dialog">
+  <p>
+    Choose up to <strong>{{maxPicks}}</strong>
+    {{#if isPlural}}categories{{else}}category{{/if}} to learn about
+    <strong>{{targetName}}</strong> — think of each as the kind of question
+    you'd ask your GM in character. Already-known categories aren't shown;
+    check the Codex for those.
+  </p>
+  {{#each categories}}
+  <div class="form-group rk-checkbox">
+    <label><input type="checkbox" name="cat" value="{{this.id}}" /> {{this.label}}</label>
+    <p class="rk-hint">{{this.hint}}</p>
+  </div>
+  {{/each}}
+</form>

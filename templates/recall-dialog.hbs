@@ -1,0 +1,46 @@
+<form class="recall-knowledge-dialog">
+  <p><strong>Target:</strong> {{targetName}} <em>({{rarityLabel}})</em></p>
+  <p class="rk-hint">Remember: the roll happens in secret — you won't be told whether it succeeded.</p>
+
+  {{#if multipleActors}}
+  <div class="form-group">
+    <label>Rolling Actor</label>
+    <select name="actorId">
+      {{#each rollingActors}}
+      <option value="{{this.id}}">{{this.name}}</option>
+      {{/each}}
+    </select>
+  </div>
+  {{/if}}
+
+  <div class="form-group">
+    <label>Skill</label>
+    <select name="skill">
+      {{#each skills}}
+      <option value="{{this.slug}}" {{#if this.suggested}}selected{{/if}}>
+        {{this.label}}{{#if this.suggested}} (suggested){{/if}}
+      </option>
+      {{/each}}
+      <option value="__custom__">Specific Lore…</option>
+    </select>
+  </div>
+
+  <div class="form-group" data-custom-skill-group>
+    <label>Lore skill slug</label>
+    <input type="text" name="customSkill" placeholder="e.g. dragon-lore" />
+  </div>
+
+  <div class="rk-attempt-banner" style="display:none;"></div>
+
+  <div class="form-group" data-adjustment-group>
+    <label>Starting Difficulty</label>
+    <select name="adjustment">
+      {{#each adjustments}}
+      <option value="{{@key}}" {{#if this.selected}}selected{{/if}}>{{this.label}} ({{this.signedValue}})</option>
+      {{/each}}
+    </select>
+    <p class="rk-hint">GM discretion for this creature. Using a Lore skill automatically makes it easier.</p>
+  </div>
+
+  <p class="rk-dc-line"><strong>DC:</strong> <span class="rk-dc">{{baseDC}}</span></p>
+</form>
