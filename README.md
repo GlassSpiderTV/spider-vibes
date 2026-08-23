@@ -73,9 +73,9 @@ escalation rule) rather than a simplified guess at them:
 5. On a failure you're told you learned nothing (and the chain ends). On a
    **critical failure**, the category you picked is answered with something
    false, presented to the player as fact. What that false info actually is
-   follows a priority order — see below — and it's logged (not to the same
-   page the player can read, but to a GM-only page) so there's a record of
-   every lie the party's been told.
+   follows a priority order — see below — and it's logged right onto that
+   creature's own Codex page, marked with a GM-only note so you always know
+   which entries are lies.
 
 ### What a Critical Failure actually shows
 
@@ -107,36 +107,54 @@ that directly instead of asking the GM to hand-write every false statement:
 3. **Otherwise, a generic placeholder** telling the GM to improvise —
    used only when there's no GM-authored lore *and* no eligible creature
    was found anywhere (world or compendiums) to mistake it for. (This
-   placeholder case is the one thing that's never logged to the False Lore
-   page below — there's no actual claim to record.)
+   placeholder case is the one thing that's never logged to the Codex —
+   there's no actual claim to record.)
 
-### The False Lore log (GM-only)
+### False entries in the Codex
 
 Every piece of false info a critical failure actually shows a player (GM
-lore or a mistaken-identity pick, not the generic placeholder) is logged to
-that creature's **False Lore** page — a page that lives in the same Codex
-journal as the real info, but is a *separate* `JournalEntryPage` with its
-ownership forced to GM-only, independent of whatever the Codex's own
-player-facing permission setting is. Players can never see it, even under
-the "Owner" Codex setting, because Foundry's ownership check happens
-per-page, and GM users bypass ownership checks entirely so it's always
-readable to you. Practically, this means:
+lore or a mistaken-identity pick, not the generic placeholder) is logged
+right onto that creature's normal Codex page — the same page the real,
+truthfully-learned categories live on, not a separate one:
 
-- The GM-only chat message posted alongside every critical failure includes
-  a **"Remove this from the Codex"** button, for when you want to retract a
-  lie (the party rerolled and got the truth, you changed your mind about
-  the creature, etc.). Clicking it removes just that one entry.
-- You can browse the full log for a creature anytime by opening its False
-  Lore page directly in the Codex journal (only visible to you).
+- The false content is wrapped in a native Foundry **Secret** block (the
+  same feature GMs already use throughout Foundry journals — the ProseMirror
+  editor's "Secret" toolbar button produces the exact same markup). It
+  **defaults to revealed** the moment it's logged, since a critical failure
+  is meant to deceive the party *immediately* — that's the "show" default
+  you'd expect. Toggling it is Foundry's own built-in reveal/hide control:
+  open the Codex, find the entry, and click its eye icon to hide it from
+  players (or reveal it again) — no custom button needed, it's the same
+  control every Secret block in Foundry has.
+- Right above it, a **second, separate Secret block** — created un-revealed
+  and meant to stay that way — carries a GM-only note explicitly marking
+  that entry as **FALSE**, plus where it came from (the GM lore text, or
+  which creature it was borrowed from and which category). This is what
+  lets you tell false entries apart from real ones at a glance while
+  reading the Codex, without needing to remember which is which.
+- The GM-only chat message posted alongside every critical failure also
+  includes a **"Remove this from the Codex"** button, for when you want to
+  retract a lie outright (the party rerolled and got the truth, you changed
+  your mind about the creature, etc.) rather than just hiding it.
 - It's also available from the API for macros/console use:
-  `await api.codex.getFalseInfo(actor)` returns the array of logged entries
-  (`{id, categoryId, categoryLabel, html, source, sourceDetail, loggedAt}`,
-  where `source` is `"gm-lore"` or `"mistaken-identity"`), and
-  `await api.codex.removeFalseInfo(actor, entryId)` retracts one by id.
-- Like the real-info page, writes are relayed through a connected GM's
-  client if the critical failure happened to resolve on a player's screen
-  (e.g. they ran the Recall Knowledge macro themselves) — no elevated
-  permissions needed on the player's end for the log to work.
+  `await api.codex.getFalseCategories(actor)` returns the category ids
+  currently marked false; `await api.codex.getFalseInfo(actor)` returns the
+  full data for each (`{html, source, sourceDetail, entryId, revealed,
+  loggedAt}`, where `source` is `"gm-lore"` or `"mistaken-identity"`); and
+  `await api.codex.removeFalseInfo(actor, categoryId)` retracts one.
+- Writes are relayed through a connected GM's client if the critical
+  failure happened to resolve on a player's screen (e.g. they ran the
+  Recall Knowledge macro themselves) — no elevated permissions needed on
+  the player's end for the log to work, same as real Codex entries.
+- **A caveat worth knowing:** Foundry's Secret blocks are a client-side
+  visual mask, not a hard permission boundary — the underlying HTML
+  (including the "FALSE" note) is still sent to every client with view
+  access to the page, just hidden by CSS until revealed. A player who goes
+  looking in their browser's dev tools could find it. For virtually every
+  table this is a non-issue (same as it is for every other Secret block in
+  Foundry), but it's not the same guarantee as a true GM-only permission —
+  if that matters for your table, keep anything truly sensitive out of the
+  Codex entirely.
 
 ## Installation
 
@@ -176,9 +194,13 @@ log:
   GM's client automatically over Foundry's built-in socket, so nobody needs
   elevated journal permissions for the flow to work end to end.
 - Each page also carries structured data at
-  `page.flags["spider-vibes"].sections`, e.g.
-  `{ immunities: { known: true, html: "...", learnedAt: <worldTime> }, ... }`
-  — so other code can check exactly what's known without parsing HTML.
+  `page.flags["spider-vibes"].sections`, keyed by category id — a real,
+  learned entry looks like `{ known: true, html: "...", learnedAt:
+  <worldTime> }`; a false one (see below) looks like `{ isFalse: true,
+  html: "...", source: "gm-lore"|"mistaken-identity", sourceDetail: "...",
+  entryId: "...", revealed: true, loggedAt: <worldTime> }` — so other code
+  can check exactly what's known (or been falsely claimed) without parsing
+  HTML.
 - The module exposes a documented API at
   `game.modules.get("spider-vibes").api`:
 
@@ -207,13 +229,18 @@ log:
   await api.codex.learnCategory(actor, "abilities", "<p>...</p>");
   //    ^ writes directly, no relay — only use from GM-only code paths.
 
+  await api.codex.getFalseCategories(actor);   // e.g. ["immunities"] — categories currently marked false
   await api.codex.getFalseInfo(actor);
-  //    ^ GM-only data: the logged false-info entries for a creature, e.g.
-  //      [{ id, categoryId, categoryLabel, html, source, sourceDetail, loggedAt }, ...]
-  //      source is "gm-lore" or "mistaken-identity".
+  //    ^ full data for each currently-false category, e.g.
+  //      { immunities: { html, source, sourceDetail, entryId, revealed, loggedAt } }
+  //      source is "gm-lore" or "mistaken-identity". `revealed` reflects the
+  //      state at logging time only — a GM toggling the Secret block's own
+  //      reveal icon afterward doesn't write back here, so treat it as a
+  //      starting point, not a live status; the Codex page itself is the
+  //      source of truth for what's currently shown.
 
-  await api.codex.removeFalseInfo(actor, entryId);
-  //    ^ retract one logged false-info entry by id. Returns true if found & removed.
+  await api.codex.removeFalseInfo(actor, categoryId);
+  //    ^ retract one false entry by category id. Returns true if found & removed.
 
   await api.codex.recordFalseInfo(actor, { categoryId, html, source, sourceDetail });
   //    ^ permission-aware, same relay behavior as api.codex.learn — mainly
@@ -273,19 +300,19 @@ log:
   connected GM to relay the write — if the whole table is players-only with
   no GM logged in, results still display in chat but won't persist until
   someone relays or manually adds them. The same applies to logging false
-  info to the (GM-only) False Lore page.
-- The False Lore page's GM-only visibility comes entirely from Foundry's
-  per-page ownership (`ownership.default: NONE`), not from hiding it in the
-  UI — if you ever manually change that page's permissions in the journal's
-  own Configure Permissions dialog, its contents become visible to whoever
-  you grant access to. Leave it alone unless you specifically want to share
-  a creature's false-lore history with someone.
-- Manually editing a False Lore page's text in the journal editor won't
-  update its underlying data — the page's text is only regenerated by the
-  module itself (when a new entry is logged or one is removed), so a hand
-  edit will just get overwritten the next time something changes there. Use
-  the "Remove this from the Codex" chat button or `api.codex.removeFalseInfo`
-  to retract an entry instead of editing the page directly.
+  entries.
+- False entries hide from players via Foundry's native Secret-block
+  masking, which is a client-side visual mask rather than a hard server-side
+  permission boundary (see the caveat above) — don't rely on it for
+  anything you genuinely can't afford a determined player to see.
+- Manually editing a creature's Codex page text in the journal editor won't
+  update the module's own record of what's known/false — the page's text is
+  only regenerated by the module itself (when something new is learned,
+  logged, or removed), so a hand edit to the prose will get overwritten the
+  next time anything changes on that page. The Secret blocks' reveal/hide
+  *toggle* is the one exception — that's Foundry's own click handling and
+  is safe to use freely. Use the "Remove this from the Codex" chat button
+  or `api.codex.removeFalseInfo` to retract an entry outright.
 - The module uses Foundry's classic `Dialog` API for its prompts for the
   broadest compatibility across v12–v14; you may see a harmless deprecation
   warning in the console on newer versions.
