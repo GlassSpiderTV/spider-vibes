@@ -1,0 +1,44 @@
+{
+  "id": "spider-vibes",
+  "title": "Spider Vibes",
+  "description": "Spider Vibes automates the Pathfinder 2e Remaster Recall Knowledge action per GM Core's actual rules: rarity-adjusted DC by level, correct skill-by-trait table, a Lore-skill discount, secret rolling so the player never learns their own degree of success, and an escalating-DC repeat-check chain that locks out after a failure. On success the player picks number-free information pulled from the creature's own sheet, compiled into a persistent Codex journal with a documented API other tools can build on.",
+  "version": "3.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "14"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "5"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/recall-knowledge.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "authors": [
+    {
+      "name": "Kevin"
+    }
+  ],
+  "url": "https://github.com/GlassSpiderTV/spider-vibes",
+  "manifest": "https://raw.githubusercontent.com/GlassSpiderTV/spider-vibes/main/module.json",
+  "download": "https://github.com/GlassSpiderTV/spider-vibes/releases/latest/download/spider-vibes.zip",
+  "readme": "README.md",
+  "license": "LICENSE.txt"
+}

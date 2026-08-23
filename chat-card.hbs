@@ -1,0 +1,16 @@
+<div class="recall-knowledge-card">
+  <header>
+    <i class="fa-solid fa-brain"></i>
+    <span class="rk-title">Recall Knowledge — {{name}}</span>
+  </header>
+  {{#if text}}
+  <div class="rk-text">{{{text}}}</div>
+  {{/if}}
+  {{#each sections}}
+  <h4>{{this.label}}</h4>
+  <div class="rk-text">{{{this.html}}}</div>
+  {{/each}}
+  {{#if codexLink}}
+  <p class="rk-codex-link">{{{codexLink}}}</p>
+  {{/if}}
+</div>

@@ -1,0 +1,12 @@
+{
+  "RECALLKNOWLEDGE.Settings.SecretRolls.Name": "Roll Recall Knowledge in secret",
+  "RECALLKNOWLEDGE.Settings.SecretRolls.Hint": "Per GM Core: the player never learns their own degree of success. The roll is made blind (visible only to the GM), and the player-facing chat card never shows the DC or outcome — only the resulting information, or its absence. Turn off if your table prefers open rolls.",
+  "RECALLKNOWLEDGE.Settings.LoreReduction.Name": "Lore skill DC reduction",
+  "RECALLKNOWLEDGE.Settings.LoreReduction.Hint": "GM Core: using an appropriate Lore skill instead of a general knowledge skill lowers the DC by 2 or 5, at the GM's discretion. This also determines how many additional attempts a Lore-based check gets before the escalating-DC repeat-check chain runs out.",
+  "RECALLKNOWLEDGE.Settings.RevealToAll.Name": "Reveal successes to the whole party",
+  "RECALLKNOWLEDGE.Settings.RevealToAll.Hint": "When a Recall Knowledge check succeeds or critically succeeds, show the result to every player instead of just whispering it to the roller and the GM.",
+  "RECALLKNOWLEDGE.Settings.CodexJournalName.Name": "Codex journal name",
+  "RECALLKNOWLEDGE.Settings.CodexJournalName.Hint": "The name given to the auto-created journal that stores everything the party has learned via Recall Knowledge. Only used the first time the Codex is created.",
+  "RECALLKNOWLEDGE.Settings.CodexOwnership.Name": "Player permission on the Codex",
+  "RECALLKNOWLEDGE.Settings.CodexOwnership.Hint": "Only used the first time the Codex is created — the GM can always change permissions afterward from the journal's own Configure Permissions dialog. With Observer, players can read the Codex but any new knowledge they learn is relayed through an online GM's client to be saved; if no GM is connected at that moment, the result still shows in chat but isn't saved."
+}
