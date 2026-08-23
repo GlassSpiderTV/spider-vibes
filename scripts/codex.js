@@ -30,23 +30,19 @@ export function codexKeyForActor(actor) {
 
 /**
  * Renders a Critical-Failure false entry using Foundry's native "Secret"
- * text blocks — the same feature GMs already use throughout Foundry
+ * text block — the same feature GMs already use throughout Foundry
  * journals, so the reveal/hide toggle in the sheet UI works out of the box
- * with no custom code. Two independent secret sections:
- *   - the false content itself, defaulting to REVEALED (visible to
- *     players) since that's the point — the party was told this as fact;
- *   - a GM-only note flagging it as false, created UN-revealed and meant
- *     to stay that way.
+ * with no custom code. The false content defaults to REVEALED (visible to
+ * players) since that's the point — the party was told this as fact. A GM
+ * can hide it from players anytime using that same built-in reveal/hide
+ * toggle, or remove the entry entirely via the "Remove this from the
+ * Codex" button on the GM-only chat message.
  * See the README for the caveat that Secret blocks are a client-side
  * visual mask (not a hard permission boundary).
  */
 function renderFalseSection(sec) {
   const revealedClass = sec.revealed === false ? "" : " revealed";
-  const noteText = sec.sourceDetail ? `This entry is FALSE. ${sec.sourceDetail}` : "This entry is FALSE.";
   return [
-    `<section class="secret" id="secret-${sec.entryId}-note">`,
-    `<p><strong>⚠ GM ONLY — leave this one unrevealed:</strong> ${noteText}</p>`,
-    `</section>`,
     `<section class="secret${revealedClass}" id="secret-${sec.entryId}-content">`,
     sec.html,
     `</section>`
@@ -173,11 +169,12 @@ export async function learnCategory(actor, categoryId, html, { displayName } = {
  * Critical-Failure false info lives right on the creature's normal Codex
  * page — the same one real knowledge lives on — instead of a separate
  * hidden page. Each false category is wrapped in Foundry's native "Secret"
- * text blocks (see `renderFalseSection` above): the false content defaults
- * to revealed (visible to players, since that's the whole point) and a
- * second, GM-only note stays hidden, flagging that entry as false. The
- * reveal/hide toggle in the journal sheet is Foundry's own built-in
- * control — no custom UI needed for that part.
+ * text block (see `renderFalseSection` above), defaulting to revealed
+ * (visible to players, since that's the whole point of a critical
+ * failure). The reveal/hide toggle in the journal sheet is Foundry's own
+ * built-in control — no custom UI needed for that part — and the "Remove
+ * this from the Codex" button on the GM-only chat message deletes the
+ * entry outright.
  */
 
 /** @returns {Promise<string[]>} category ids currently marked false (GM lore or mistaken-identity) for this creature */

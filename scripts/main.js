@@ -499,9 +499,11 @@ class RecallKnowledge {
       const alreadyFalse = new Set(await getFalseCategories(targetActor));
       const available = CATEGORIES.filter((c) => !known.has(c.id) && !alreadyFalse.has(c.id));
       if (available.length === 0) {
+        const codexLink = await buildCodexLink(targetActor);
         await postPlayerCard(targetActor, {
           outcome,
           text: "The party already knows everything Recall Knowledge can reveal about this creature.",
+          codexLink,
           rollingUser
         });
         await ChatMessage.create({
@@ -537,17 +539,14 @@ class RecallKnowledge {
           "You recall something about this creature... and you're certain of it. (No similar creature or GM-authored false lore was found — improvise something plausible but wrong.)";
       }
 
-      const sections = [{ label: categoryLabel(catId), html: text }];
-      await postPlayerCard(targetActor, { outcome, sections, rollingUser });
-
       // Log it onto the creature's actual Codex page — the same page real
       // knowledge lives on — as a Foundry "Secret" block, defaulted to
       // revealed (visible to players, since that's the whole point of a
-      // critical failure). A second, GM-only secret note right next to it
-      // flags the entry as false; that one's created un-revealed and is
-      // meant to stay that way. Nothing is logged for the generic
-      // no-source placeholder above, since that's an instruction to the GM
-      // to improvise, not an actual claim.
+      // critical failure). Nothing is logged for the generic no-source
+      // placeholder above, since that's an instruction to the GM to
+      // improvise, not an actual claim. Recording happens before the
+      // player card is posted so its Codex link (same as success/critical
+      // success) reflects the page this write just created or updated.
       let recorded = null;
       if (source) {
         recorded = await requestRecordFalseInfo(targetActor, {
@@ -558,6 +557,10 @@ class RecallKnowledge {
         });
       }
 
+      const codexLink = await buildCodexLink(targetActor);
+      const sections = [{ label: categoryLabel(catId), html: text }];
+      await postPlayerCard(targetActor, { outcome, sections, codexLink, rollingUser });
+
       const gmOnlyLines = [
         `Critical failure: the "${categoryLabel(catId)}" info shown above was presented to the player as fact, but it is FALSE.`
       ];
@@ -566,7 +569,7 @@ class RecallKnowledge {
       if (source) {
         gmOnlyLines.push(
           recorded
-            ? 'Added to this creature\'s Codex page as a Secret block, shown to players by default — click its reveal icon in the journal anytime to hide it from them (or show it again). The note above it explaining it\'s false is a separate Secret, created un-revealed — leave that one alone, or use the button below to remove the whole false entry.'
+            ? 'Added to this creature\'s Codex page as a Secret block, shown to players by default — click its reveal icon in the journal anytime to hide it from them, or use the button below to remove it from the Codex entirely.'
             : "Couldn't log this to the Codex — no GM was online to relay the write. Note it down yourself if you want a record."
         );
       }
@@ -803,7 +806,8 @@ Hooks.once("ready", async () => {
         getOrCreateJournal,
         openCodex,
         // False Lore — Critical-Failure entries logged right on the
-        // creature's Codex page, marked with a GM-only Secret note.
+        // creature's Codex page as a single Secret block, defaulted to
+        // revealed for players.
         getFalseCategories,
         getFalseInfo,
         removeFalseInfo,
