@@ -1,5 +1,5 @@
 import { MODULE_ID, slugify } from "./utils.js";
-import { CATEGORIES, categoryLabel } from "./categories.js";
+import { CATEGORIES } from "./categories.js";
 
 /**
  * The Codex is a single world JournalEntry (auto-created) with one
@@ -28,12 +28,40 @@ export function codexKeyForActor(actor) {
   return isUnique ? `unique-${actor.id}` : `kind-${slugify(actor.name)}`;
 }
 
+/**
+ * Renders a Critical-Failure false entry using Foundry's native "Secret"
+ * text blocks — the same feature GMs already use throughout Foundry
+ * journals, so the reveal/hide toggle in the sheet UI works out of the box
+ * with no custom code. Two independent secret sections:
+ *   - the false content itself, defaulting to REVEALED (visible to
+ *     players) since that's the point — the party was told this as fact;
+ *   - a GM-only note flagging it as false, created UN-revealed and meant
+ *     to stay that way.
+ * See the README for the caveat that Secret blocks are a client-side
+ * visual mask (not a hard permission boundary).
+ */
+function renderFalseSection(sec) {
+  const revealedClass = sec.revealed === false ? "" : " revealed";
+  const noteText = sec.sourceDetail ? `This entry is FALSE. ${sec.sourceDetail}` : "This entry is FALSE.";
+  return [
+    `<section class="secret" id="secret-${sec.entryId}-note">`,
+    `<p><strong>⚠ GM ONLY — leave this one unrevealed:</strong> ${noteText}</p>`,
+    `</section>`,
+    `<section class="secret${revealedClass}" id="secret-${sec.entryId}-content">`,
+    sec.html,
+    `</section>`
+  ].join("\n");
+}
+
 function renderCodexBody(name, sections) {
   const parts = [`<h2>${name}</h2>`];
   for (const cat of CATEGORIES) {
     const sec = sections[cat.id];
-    if (sec?.known) {
-      parts.push(`<h3>${cat.label}</h3>`);
+    if (!sec) continue;
+    parts.push(`<h3>${cat.label}</h3>`);
+    if (sec.isFalse) {
+      parts.push(renderFalseSection(sec));
+    } else if (sec.known) {
       parts.push(sec.html);
     }
   }
@@ -139,43 +167,42 @@ export async function learnCategory(actor, categoryId, html, { displayName } = {
   return { key, page, sections };
 }
 
-/* --------------------------- False Lore log (GM-only) --------------------------- */
+/* --------------------------- False Lore, in-page --------------------------- */
 
 /**
- * Everything a Critical Failure has told a player about a creature is
- * logged too — not on the same page players can read, but on a sibling
- * page in the same Codex journal with its ownership forced to NONE, so it
- * never leaks to players even under the "Owner" Codex setting (GM users
- * bypass Foundry's ownership checks entirely, so this stays fully readable
- * to any GM regardless). Each entry is individually removable — see
- * `removeFalseInfo` — for when a GM wants to retract or clean up a lie
- * (e.g. after the party rerolls and learns the truth, or the GM changes
- * their mind about what the creature actually was).
+ * Critical-Failure false info lives right on the creature's normal Codex
+ * page — the same one real knowledge lives on — instead of a separate
+ * hidden page. Each false category is wrapped in Foundry's native "Secret"
+ * text blocks (see `renderFalseSection` above): the false content defaults
+ * to revealed (visible to players, since that's the whole point) and a
+ * second, GM-only note stays hidden, flagging that entry as false. The
+ * reveal/hide toggle in the journal sheet is Foundry's own built-in
+ * control — no custom UI needed for that part.
  */
-function findFalsePage(journal, key) {
-  return journal.pages.find((p) => p.getFlag(MODULE_ID, "falseLoreKey") === key);
+
+/** @returns {Promise<string[]>} category ids currently marked false (GM lore or mistaken-identity) for this creature */
+export async function getFalseCategories(actorOrKey) {
+  const entry = await getCodexEntry(actorOrKey);
+  if (!entry) return [];
+  return Object.keys(entry.sections).filter((id) => entry.sections[id]?.isFalse);
 }
 
-function renderFalseLoreBody(name, entries) {
-  const parts = [`<h2>${name} — False Lore Log (GM Only)</h2>`];
-  if (!entries.length) {
-    parts.push("<p><em>No false information has been given out yet.</em></p>");
-    return parts.join("\n");
+/** @returns {Promise<object>} categoryId -> false-entry data, for whichever categories are currently marked false */
+export async function getFalseInfo(actorOrKey) {
+  const entry = await getCodexEntry(actorOrKey);
+  if (!entry) return {};
+  const out = {};
+  for (const [id, sec] of Object.entries(entry.sections)) {
+    if (sec?.isFalse) out[id] = sec;
   }
-  for (const e of entries) {
-    parts.push(`<h3>${e.categoryLabel} <span style="font-weight:normal;font-size:0.85em;">(id: ${e.id})</span></h3>`);
-    if (e.sourceDetail) parts.push(`<p><em>${e.sourceDetail}</em></p>`);
-    parts.push(e.html);
-  }
-  return parts.join("\n");
+  return out;
 }
 
 /**
- * Log a piece of Critical-Failure false info to the (GM-only) False Lore
- * page for this creature, creating that page on first use.
+ * Log a piece of Critical-Failure false info onto a creature's Codex page.
  * @param {Actor} actor the creature the false info was attributed to
  * @param {{categoryId:string, html:string, source?:string, sourceDetail?:string}} opts
- * @returns {Promise<{key:string, page:JournalEntryPage, entry:object}>}
+ * @returns {Promise<{key:string, page:JournalEntryPage, categoryId:string}>}
  */
 export async function recordFalseInfo(actor, { categoryId, html, source, sourceDetail } = {}) {
   const journal = await getOrCreateJournal();
@@ -183,74 +210,60 @@ export async function recordFalseInfo(actor, { categoryId, html, source, sourceD
 
   const key = codexKeyForActor(actor);
   const name = actor.name;
-  let page = findFalsePage(journal, key);
-  const entries = [...(page?.getFlag(MODULE_ID, "falseEntries") ?? [])];
-  const entry = {
-    id: foundry.utils.randomID(),
-    categoryId,
-    categoryLabel: categoryLabel(categoryId),
+  let page = findPage(journal, key);
+  const sections = { ...(page?.getFlag(MODULE_ID, "sections") ?? {}) };
+  sections[categoryId] = {
+    isFalse: true,
     html,
     source: source ?? "unknown",
     sourceDetail: sourceDetail ?? "",
+    entryId: foundry.utils.randomID(),
+    revealed: true,
     loggedAt: game.time?.worldTime ?? Date.now?.() ?? 0
   };
-  entries.push(entry);
-  const bodyHtml = renderFalseLoreBody(name, entries);
+  const bodyHtml = renderCodexBody(name, sections);
 
   if (page) {
     await page.update({
       "text.content": bodyHtml,
-      [`flags.${MODULE_ID}.falseEntries`]: entries
+      [`flags.${MODULE_ID}.sections`]: sections
     });
   } else {
     const [created] = await journal.createEmbeddedDocuments("JournalEntryPage", [
       {
-        name: `${name} — False Lore (GM Only)`,
+        name,
         type: "text",
         text: { content: bodyHtml, format: CONST.JOURNAL_ENTRY_PAGE_FORMATS?.HTML ?? 1 },
-        // Forced hidden from everyone but GMs (who bypass ownership checks
-        // entirely), regardless of the Codex's own player-facing setting.
-        ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE },
-        flags: { [MODULE_ID]: { falseLoreKey: key, isFalseLore: true, falseEntries: entries, sourceActorUuid: actor.uuid } }
+        flags: { [MODULE_ID]: { codexKey: key, sections, sourceActorUuid: actor.uuid } }
       }
     ]);
     page = created;
   }
 
-  return { key, page, entry };
-}
-
-/** @returns {Promise<object[]>} the logged false-info entries for a creature (GM-only data) */
-export async function getFalseInfo(actorOrKey) {
-  const journal = await getOrCreateJournal();
-  if (!journal) return [];
-  const key = typeof actorOrKey === "string" ? actorOrKey : codexKeyForActor(actorOrKey);
-  const page = findFalsePage(journal, key);
-  return page?.getFlag(MODULE_ID, "falseEntries") ?? [];
+  return { key, page, categoryId };
 }
 
 /**
- * Retract one logged false-info entry (e.g. from the "Remove this from the
- * Codex" link on the GM-only chat message, or called directly by a GM).
- * Always runs GM-side — the False Lore page's ownership is GM-only, so
- * there's nothing to relay: a GM user always has direct write access.
+ * Retract one false-info entry (e.g. from the "Remove this from the Codex"
+ * link on the GM-only chat message, or called directly). Only removes an
+ * entry actually marked false, so this can never delete real knowledge.
  * @returns {Promise<boolean>} whether an entry was found and removed
  */
-export async function removeFalseInfo(actor, entryId) {
+export async function removeFalseInfo(actor, categoryId) {
   const journal = await getOrCreateJournal();
   if (!journal) return false;
   const key = codexKeyForActor(actor);
-  const page = findFalsePage(journal, key);
+  const page = findPage(journal, key);
   if (!page) return false;
 
-  const before = page.getFlag(MODULE_ID, "falseEntries") ?? [];
-  const entries = before.filter((e) => e.id !== entryId);
-  if (entries.length === before.length) return false;
+  const sections = { ...(page.getFlag(MODULE_ID, "sections") ?? {}) };
+  if (!sections[categoryId]?.isFalse) return false;
+  delete sections[categoryId];
 
-  const bodyHtml = renderFalseLoreBody(actor.name, entries);
+  const bodyHtml = renderCodexBody(actor.name, sections);
   await page.update({
     "text.content": bodyHtml,
-    [`flags.${MODULE_ID}.falseEntries`]: entries
+    [`flags.${MODULE_ID}.sections`]: sections
   });
   return true;
 }
@@ -258,14 +271,15 @@ export async function removeFalseInfo(actor, entryId) {
 /**
  * Permission-aware way to log false info from wherever the Critical
  * Failure was actually resolved (often a player's client, if a player ran
- * the macro themselves) — mirrors `requestLearnCategory`'s GM-relay
- * pattern, since the False Lore page's ownership is always GM-only.
- * @returns {Promise<{key:string, entryId:string, pageUuid:string}|null>}
+ * the macro themselves) — same GM-relay pattern as `requestLearnCategory`,
+ * since this writes to the same page/journal.
+ * @returns {Promise<{key:string, categoryId:string, pageUuid:string}|null>}
  */
 export async function requestRecordFalseInfo(actor, opts = {}) {
-  if (game.user.isGM) {
+  const journal = await getOrCreateJournal();
+  if (journal && (await canWriteCodexDirectly(journal))) {
     const result = await recordFalseInfo(actor, opts);
-    return { key: result.key, entryId: result.entry.id, pageUuid: result.page.uuid };
+    return { key: result.key, categoryId: result.categoryId, pageUuid: result.page.uuid };
   }
 
   const hasConnectedGM = game.users.some((u) => u.isGM && u.active);
@@ -295,7 +309,7 @@ export async function requestRecordFalseInfo(actor, opts = {}) {
 
   const response = await responsePromise;
   if (!response.ok) return null;
-  return { key: response.key, entryId: response.entryId, pageUuid: response.pageUuid };
+  return { key: response.key, categoryId: response.categoryId, pageUuid: response.pageUuid };
 }
 
 /* --------------------------- GM-relay for locked-down Codexes --------------------------- */
@@ -400,7 +414,7 @@ export function initCodexSocket() {
           requestId: payload.requestId,
           ok: true,
           key: result.key,
-          entryId: result.entry.id,
+          categoryId: result.categoryId,
           pageUuid: result.page.uuid
         });
       } catch (err) {
