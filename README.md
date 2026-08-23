@@ -68,10 +68,40 @@ escalation rule) rather than a simplified guess at them:
    written into that creature's page in the **Codex** journal — shared
    across all instances of that "kind" of creature, not just this encounter.
 5. On a failure you're told you learned nothing (and the chain ends). On a
-   critical failure you're shown a piece of GM-authored false information
-   as if it were true (nothing is saved to the Codex) — the GM sets this
-   per-creature from a button on the NPC sheet; if left blank, a generic
-   "improvise something wrong" placeholder is used instead.
+   critical failure you're shown a piece of false information as if it were
+   true (nothing is saved to the Codex). What that false info actually is
+   follows a priority order — see below.
+
+### What a Critical Failure actually shows
+
+GM Core's own example is a player mistaking a troll for a marsh giant, and
+therefore wrongly believing it doesn't regenerate. Spider Vibes automates
+that directly instead of asking the GM to hand-write every false statement:
+
+1. **GM-authored false lore, if set.** Open the NPC's sheet and click
+   **RK: False Lore** to write specific false info for that creature. If
+   present, this always wins.
+2. **Otherwise, a real "mistaken identity" creature.** The module searches
+   for a genuinely similar creature — same/overlapping traits, comparable
+   level — first among **actors already placed in the world**, and only if
+   none qualify, among **installed compendium packs**. If one is found, the
+   player is shown one of *that* creature's real, number-free categories
+   (picked at random, using the same extraction real successes use) as if
+   it belonged to the target. The GM-only follow-up message names which
+   creature was actually used and which category was shown, so you always
+   know what the player was really told.
+   - Creatures with the PF2e **unique** trait are never used as the
+     stand-in (spoiler risk, and it doesn't fit the "mistaken for a *kind*
+     of creature" flavor).
+   - Once a creature has been mistaken for something, **it stays mistaken
+     for that same thing** — the pick is cached on the creature (an actor
+     flag) so repeated critical failures are consistent instead of
+     re-rolling a new false identity each time. Search order is world
+     actors first, then compendiums; ties are broken by closest level, then
+     randomly.
+3. **Otherwise, a generic placeholder** telling the GM to improvise —
+   used only when there's no GM-authored lore *and* no eligible creature
+   was found anywhere (world or compendiums) to mistake it for.
 
 ## Installation
 
@@ -93,8 +123,10 @@ escalation rule) rather than a simplified guess at them:
 Open any NPC's sheet as the GM and click **RK: False Lore** in the sheet
 header. Fill in what a critically-failed check tells the player (shown as
 fact, never flagged as false to them) and optional GM notes (never shown to
-players). This is the only manual-authoring step left in the module — real
-information is always pulled from the sheet automatically.
+players). This is entirely optional — leave it blank and the module will
+automatically fall back to a real similar creature's stats instead (see
+above); this field is only for when you want a specific, hand-written lie
+instead.
 
 ## The Codex, and building on top of it
 
@@ -185,6 +217,11 @@ log:
   PF2e system (e.g. a non-PF2e actor, or a Lore skill it doesn't possess),
   the module falls back to a simple manual-modifier `1d20` roll, still made
   blind if secret rolling is on.
+- The mistaken-identity pick for a creature is cached as an actor flag
+  (`flags.spider-vibes.mistakenIdentity`, a UUID), so unlike the escalating
+  attempt-tracker it survives world reloads. Clear it by hand (delete the
+  flag, or via a macro) if you want a fresh pick — e.g. after significantly
+  changing which creatures exist in the world.
 - With the default `Observer` Codex setting, saving new knowledge needs a
   connected GM to relay the write — if the whole table is players-only with
   no GM logged in, results still display in chat but won't persist until
@@ -205,6 +242,7 @@ spider-vibes/
 │  ├─ skill-map.js     # trait → suggested skill mapping (GM Core p.55)
 │  ├─ categories.js    # the 6 knowledge categories, with example in-character questions
 │  ├─ extract.js       # pulls each category's data off an actor's sheet, number-free
+│  ├─ mistaken-identity.js  # finds a similar real creature for automatic Crit-Fail false info
 │  ├─ codex.js         # Codex journal storage, GM-relay socket, public API
 │  └─ utils.js         # shared helpers (module id, template/dialog compat, number-stripping)
 ├─ templates/
