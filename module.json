@@ -2,7 +2,7 @@
   "id": "spider-vibes",
   "title": "Spider Vibes",
   "description": "Spider Vibes automates the Pathfinder 2e Remaster Recall Knowledge action per GM Core's actual rules: rarity-adjusted DC by level, correct skill-by-trait table, a Lore-skill discount, secret rolling so the player never learns their own degree of success, and an escalating-DC repeat-check chain that locks out after a failure. On success the player picks number-free information pulled from the creature's own sheet, compiled into a persistent Codex journal with a documented API other tools can build on.",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "compatibility": {
     "minimum": "12",
     "verified": "14"

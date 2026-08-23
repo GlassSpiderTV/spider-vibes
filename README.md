@@ -52,10 +52,10 @@ escalation rule) rather than a simplified guess at them:
 3. Click **Roll**. The check happens through the PF2e system's own skill
    statistic (circumstance bonuses, Hero Point rerolls, etc. all work), but
    **blind** — you won't see your own result.
-4. If it was a success or critical success, a checklist appears with the
-   categories still unknown about that creature, phrased around the kind of
-   question the rules' own examples use ("what's its worst saving throw?",
-   "is it vulnerable or resistant to anything?"):
+4. If it was a success, critical success, **or critical failure**, a
+   checklist appears with the categories still unknown about that creature,
+   phrased around the kind of question the rules' own examples use ("what's
+   its worst saving throw?", "is it vulnerable or resistant to anything?"):
    - Overview & Traits
    - Best & Worst Saving Throws
    - Immunities, Resistances & Weaknesses
@@ -63,14 +63,19 @@ escalation rule) rather than a simplified guess at them:
    - Special Abilities
    - Attacks & Spellcasting
 
-   Pick 1 (success) or up to 2 (critical success). What you pick is pulled
-   from the creature's real sheet data, stripped of exact numbers, and
-   written into that creature's page in the **Codex** journal — shared
+   Pick 1 (success or critical failure) or up to 2 (critical success). This
+   dialog looks and behaves identically no matter which of those three it
+   actually was — the player has no way to tell from the prompt itself
+   whether what they're about to learn is true. What you pick on a success
+   is pulled from the creature's real sheet data, stripped of exact numbers,
+   and written into that creature's page in the **Codex** journal — shared
    across all instances of that "kind" of creature, not just this encounter.
 5. On a failure you're told you learned nothing (and the chain ends). On a
-   critical failure you're shown a piece of false information as if it were
-   true (nothing is saved to the Codex). What that false info actually is
-   follows a priority order — see below.
+   **critical failure**, the category you picked is answered with something
+   false, presented to the player as fact. What that false info actually is
+   follows a priority order — see below — and it's logged (not to the same
+   page the player can read, but to a GM-only page) so there's a record of
+   every lie the party's been told.
 
 ### What a Critical Failure actually shows
 
@@ -101,7 +106,37 @@ that directly instead of asking the GM to hand-write every false statement:
      randomly.
 3. **Otherwise, a generic placeholder** telling the GM to improvise —
    used only when there's no GM-authored lore *and* no eligible creature
-   was found anywhere (world or compendiums) to mistake it for.
+   was found anywhere (world or compendiums) to mistake it for. (This
+   placeholder case is the one thing that's never logged to the False Lore
+   page below — there's no actual claim to record.)
+
+### The False Lore log (GM-only)
+
+Every piece of false info a critical failure actually shows a player (GM
+lore or a mistaken-identity pick, not the generic placeholder) is logged to
+that creature's **False Lore** page — a page that lives in the same Codex
+journal as the real info, but is a *separate* `JournalEntryPage` with its
+ownership forced to GM-only, independent of whatever the Codex's own
+player-facing permission setting is. Players can never see it, even under
+the "Owner" Codex setting, because Foundry's ownership check happens
+per-page, and GM users bypass ownership checks entirely so it's always
+readable to you. Practically, this means:
+
+- The GM-only chat message posted alongside every critical failure includes
+  a **"Remove this from the Codex"** button, for when you want to retract a
+  lie (the party rerolled and got the truth, you changed your mind about
+  the creature, etc.). Clicking it removes just that one entry.
+- You can browse the full log for a creature anytime by opening its False
+  Lore page directly in the Codex journal (only visible to you).
+- It's also available from the API for macros/console use:
+  `await api.codex.getFalseInfo(actor)` returns the array of logged entries
+  (`{id, categoryId, categoryLabel, html, source, sourceDetail, loggedAt}`,
+  where `source` is `"gm-lore"` or `"mistaken-identity"`), and
+  `await api.codex.removeFalseInfo(actor, entryId)` retracts one by id.
+- Like the real-info page, writes are relayed through a connected GM's
+  client if the critical failure happened to resolve on a player's screen
+  (e.g. they ran the Recall Knowledge macro themselves) — no elevated
+  permissions needed on the player's end for the log to work.
 
 ## Installation
 
@@ -171,6 +206,18 @@ log:
 
   await api.codex.learnCategory(actor, "abilities", "<p>...</p>");
   //    ^ writes directly, no relay — only use from GM-only code paths.
+
+  await api.codex.getFalseInfo(actor);
+  //    ^ GM-only data: the logged false-info entries for a creature, e.g.
+  //      [{ id, categoryId, categoryLabel, html, source, sourceDetail, loggedAt }, ...]
+  //      source is "gm-lore" or "mistaken-identity".
+
+  await api.codex.removeFalseInfo(actor, entryId);
+  //    ^ retract one logged false-info entry by id. Returns true if found & removed.
+
+  await api.codex.recordFalseInfo(actor, { categoryId, html, source, sourceDetail });
+  //    ^ permission-aware, same relay behavior as api.codex.learn — mainly
+  //      for a future feature that wants to log its own false info.
   ```
 
 - A creature is grouped into the Codex by `codexKeyForActor()`: ordinary
@@ -225,7 +272,20 @@ log:
 - With the default `Observer` Codex setting, saving new knowledge needs a
   connected GM to relay the write — if the whole table is players-only with
   no GM logged in, results still display in chat but won't persist until
-  someone relays or manually adds them.
+  someone relays or manually adds them. The same applies to logging false
+  info to the (GM-only) False Lore page.
+- The False Lore page's GM-only visibility comes entirely from Foundry's
+  per-page ownership (`ownership.default: NONE`), not from hiding it in the
+  UI — if you ever manually change that page's permissions in the journal's
+  own Configure Permissions dialog, its contents become visible to whoever
+  you grant access to. Leave it alone unless you specifically want to share
+  a creature's false-lore history with someone.
+- Manually editing a False Lore page's text in the journal editor won't
+  update its underlying data — the page's text is only regenerated by the
+  module itself (when a new entry is logged or one is removed), so a hand
+  edit will just get overwritten the next time something changes there. Use
+  the "Remove this from the Codex" chat button or `api.codex.removeFalseInfo`
+  to retract an entry instead of editing the page directly.
 - The module uses Foundry's classic `Dialog` API for its prompts for the
   broadest compatibility across v12–v14; you may see a harmless deprecation
   warning in the console on newer versions.
