@@ -75,3 +75,18 @@
   border-top: 1px dashed #999;
   font-size: 0.9em;
 }
+
+.rk-remove-false {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85em;
+  color: #b71c1c;
+  text-decoration: none;
+  border: 1px solid #b71c1c;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+.rk-remove-false:hover {
+  background: rgba(183, 28, 28, 0.1);
+}
