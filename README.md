@@ -74,8 +74,8 @@ escalation rule) rather than a simplified guess at them:
    **critical failure**, the category you picked is answered with something
    false, presented to the player as fact. What that false info actually is
    follows a priority order — see below — and it's logged right onto that
-   creature's own Codex page, marked with a GM-only note so you always know
-   which entries are lies.
+   creature's own Codex page as a Secret block, and the player card links to
+   the Codex the same way a success or critical success does.
 
 ### What a Critical Failure actually shows
 
@@ -125,17 +125,20 @@ truthfully-learned categories live on, not a separate one:
   you'd expect. Toggling it is Foundry's own built-in reveal/hide control:
   open the Codex, find the entry, and click its eye icon to hide it from
   players (or reveal it again) — no custom button needed, it's the same
-  control every Secret block in Foundry has.
-- Right above it, a **second, separate Secret block** — created un-revealed
-  and meant to stay that way — carries a GM-only note explicitly marking
-  that entry as **FALSE**, plus where it came from (the GM lore text, or
-  which creature it was borrowed from and which category). This is what
-  lets you tell false entries apart from real ones at a glance while
-  reading the Codex, without needing to remember which is which.
-- The GM-only chat message posted alongside every critical failure also
-  includes a **"Remove this from the Codex"** button, for when you want to
-  retract a lie outright (the party rerolled and got the truth, you changed
-  your mind about the creature, etc.) rather than just hiding it.
+  control every Secret block in Foundry has. There's no separate GM-only
+  annotation alongside it — the entry is just the (false) content itself,
+  same as a real one.
+- The player-facing chat card for a critical failure links to that
+  creature's Codex page — a **"Codex: <name>"** link, formatted identically
+  to the one shown on a success or critical success — so a player can't
+  tell which kind of result they got from the card's shape either.
+- The GM-only chat message posted alongside every critical failure names the
+  category as **FALSE** (and, for a mistaken-identity pick, which creature
+  it was actually borrowed from) so you always know which entries are lies
+  without needing to open the journal, and includes a **"Remove this from
+  the Codex"** button, for when you want to retract a lie outright (the
+  party rerolled and got the truth, you changed your mind about the
+  creature, etc.) rather than just hiding it.
 - It's also available from the API for macros/console use:
   `await api.codex.getFalseCategories(actor)` returns the category ids
   currently marked false; `await api.codex.getFalseInfo(actor)` returns the
